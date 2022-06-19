@@ -3,7 +3,6 @@
         "src/**/*.ts",
     ],
     "compilerOptions": {
-        "noUnusedLocals": true,
         "noImplicitReturns": true,
         "noImplicitAny": true,
         "outDir": "dist",
@@ -11,5 +10,6 @@
         "module": "es6",
         "target": "es6",
         "moduleResolution": "Node",
+        "inlineSourceMap": true,
     }
 }
