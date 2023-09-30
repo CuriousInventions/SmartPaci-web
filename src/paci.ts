@@ -1,5 +1,6 @@
 import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor } from "./generated/bluetooth_pb";
 import {toHex} from "@smithy/util-hex-encoding";
+import { McuManager, SemVersion } from "./mcumgr";
 
 export enum InputType {
     Bite,
@@ -14,17 +15,34 @@ export enum CalibrationType {
 export interface PaciVersion {
     major: number;
     minor: number;
-    build: number;
+    revision: number;
     commit: string|null;
     datetime: Date|null;
     descript: string|null;
+}
+
+export function fromSemVersion(version: SemVersion): PaciVersion {
+    const release = ['dirty', 'alpha', 'beta', 'rc', 'preview', '', '', ''];
+    let descript = release[(version.build & 0x0700) >> 12];
+    if ((version.build & 0xff) > 0)
+        descript +=  (version.build & 0xff).toString();
+    return {major: version.major, minor: version.minor, revision: version.revision, descript, commit: null, datetime: null};
+    
 }
 
 export interface PaciEventMap {
     'bite': CustomEvent<{value: number}>;
     'suck': CustomEvent<{values: number[]}>;
     'disconnect': Event;
+    "nameChanged": CustomEvent<{name: string}>;
     "firmwareVersion": CustomEvent<{version: PaciVersion}>;
+    'featuresUpdated': CustomEvent<{features: number}>;
+}
+
+// A bitmap of supported eatures a device may have.
+// Each variant must be a bit shited value.
+export enum PaciFeature {
+    McuMgr = 1<<0,
 }
 
 // Helper interface to superimpose our custom events (and Event types) to the EventTarget
@@ -60,6 +78,8 @@ export class Paci extends typedEventTarget {
     private _disconnectSignal: AbortController;
 
     private _firmwareVersion: Promise<PaciVersion> | null;
+    private _name: string | null = null;
+    private _features: number = 0;
 
     constructor() {
         super();
@@ -70,6 +90,10 @@ export class Paci extends typedEventTarget {
         this._disconnectSignal = new AbortController();
     }
 
+    hasFeature(feature: PaciFeature): boolean {
+        return (this._features & feature) != 0;
+    }
+
     async connect(): Promise<void> {
         let params: RequestDeviceOptions = {
             filters: [
@@ -77,12 +101,19 @@ export class Paci extends typedEventTarget {
                     services: [this.SERVICE_UUID],
                 },
             ],
+            optionalServices: [
+                McuManager.SERVICE_UUID,
+            ]
         };
 
         this._device = await navigator.bluetooth.requestDevice(params);
-        // Assign a new abort controller only after a new device becomes our subject.
+
+        // Assign a new abort controller for each new device connection.
         // Abort signal used to clean up event listeners.
         this._disconnectSignal = new AbortController();
+
+        this._name = this._device?.name ?? null;
+        this.dispatchEvent(new CustomEvent('nameChanged', {detail: {name: this._name}}));
 
         this._device.addEventListener("gattserverdisconnected", 
             () => this.dispatchEvent(new Event("disconnected")),
@@ -90,6 +121,14 @@ export class Paci extends typedEventTarget {
 
         const server = await this._device.gatt?.connect();
         this._service = await server!.getPrimaryService(this.SERVICE_UUID);
+        
+        // Check to see if the McuMgr service is present.
+        server!.getPrimaryService(McuManager.SERVICE_UUID)
+            .then(_ => {
+                this._features |= PaciFeature.McuMgr;
+                this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
+            });
+
         this._controlCharacteristic = await this._service.getCharacteristic(this.CHARACTERISTIC_CONTROL_UUID);
         this._biteCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_BITE_UUID);
         this._suckCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_FORCE_UUID);
@@ -127,7 +166,7 @@ export class Paci extends typedEventTarget {
                             version: {
                                 major: version.major,
                                 minor: version.minor,
-                                build: version.build,
+                                revision: version.build,
                                 commit: toHex(version.commit),
                                 descript: version.descript,
                                 datetime: new Date(),
@@ -147,13 +186,24 @@ export class Paci extends typedEventTarget {
         await this._controlCharacteristic.startNotifications();
     }
 
+    async getName(): Promise<string> {
+        if (this._name) 
+            return this._name;
+
+        return await new Promise((resolve) => {
+            this.addEventListener('nameChanged', event => {
+                resolve(event.detail.name);
+            }, {once: true});
+        });
+    }
+
     async getFirmwareVersion(): Promise<string> {
         if (this._firmwareVersion === null) {
             this._firmwareVersion = this._getFirmwareVersion();
         }
 
         return await this._firmwareVersion.then(version => {
-            let result = `${version.major}.${version.minor}.${version.build}`;
+            let result = `${version.major}.${version.minor}.${version.revision}`;
             if (version.descript != null && version.descript.length > 0) {
                 result += `-${version.descript}`;
             }
@@ -191,13 +241,8 @@ export class Paci extends typedEventTarget {
     }
 
     async disconnect(): Promise<void> {
-        // TODO: Cleanup registered event listeners
         await this._device?.gatt?.disconnect();
     }
-
-    // addEventListener(type: string, listener: EventListenerOrEventListenerObject, useCapture?: boolean): void {
-
-    // }
 
     private async _sendRequest(request: ControlRequest): Promise<void> {
         await this._controlCharacteristic!.writeValueWithResponse(request.toBinary());

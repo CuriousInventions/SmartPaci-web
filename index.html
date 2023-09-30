@@ -10,17 +10,19 @@
 
     <title>Hello, world!</title>
     <script src="src/index.ts" type="module"></script>
+    <link rel="stylesheet" href="node_modules/bootstrap-icons/font/bootstrap-icons.css">
   </head>
   <body>
     <nav class="navbar navbar-expand-sm navbar-light bg-light">
         <div class="container-fluid">
-          <a class="navbar-brand" href="#">Navbar</a>
+          <a class="navbar-brand" href="#">Smart Paci</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarSupportedContent">
               <div class="container-fluid">
                   <div class="pt-2 pt-lg-0 text-end">
+                      <button id="btnMcuMgr" class="btn btn-outline-info" type="button" data-bs-toggle="tooltip" data-bs-title="Firmware Management"><i class="bi bi-save"></i></button>
                       <button id="btnDeviceConnect" class="btn btn-outline-success" type="button">Connect</button>
                       <button id="btnDeviceDisconnect" class="btn btn-outline-danger" type="button">Disconnect</button>
                     </div>
@@ -34,7 +36,7 @@
               <div class="col-md-3 mt-2">
                   <div class="card">
                       <div class="card-body">
-                          <h5 class="card-title">Booper</h5>
+                          <h5 class="card-title">Name: <em id="lblName"></em></h5>
                           <p class="card-text">
                               Status: <em id="lblStatus">unknown</em><br>
                               Version: <em id="lblVersion">unknown</em><br>
@@ -43,7 +45,7 @@
                   </div>
                 </div>
                 <div class="col-md-9 mt-2">
-                      <div class="card">
+                      <div class="card mb-2">
                           <div class="card-body">
                               <h5 class="card-title">Senor Readings</h5>
                               <p class="card-text">
@@ -74,6 +76,21 @@
                           </div>
                       </div>
 
+                      <div class="card mb-2">
+                        <div class="card-body">
+                            <h5 class="card-title">Mcu Management</h5>
+                            <fieldset id="fieldsetFirmware">
+                                <div class="mb-3">
+                                    <label for="fileFirmware" class="form-label">Firmware Image (.dfu or .bin)</label>
+                                    <input class="form-control" type="file" id="fileFirmware" accept=".dfu,.bin" aria-describedby="fileFirmwareValidation">
+                                    <div id="fileFirmwareValidation" class="invalid-feedback">test</div>
+                                </div>
+                                <div>
+                                    <button type="button" class="btn btn-warning" id="btnUploadFirmware">Update</button>
+                                </div>
+                            </fieldset>
+                        </div>
+                    </div>
                   </div>
           </div>
       </div>      
