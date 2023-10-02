@@ -13,9 +13,7 @@ export enum CalibrationType {
 }
 
 export interface PaciVersion {
-    major: number;
-    minor: number;
-    revision: number;
+    version: SemVersion;
     commit: string|null;
     datetime: Date|null;
     descript: string|null;
@@ -29,19 +27,19 @@ export interface PaciVersion {
  * @param version 
  * @returns 
  */
-export function fromSemVersion(version: SemVersion): PaciVersion {
-    const release = ['dirty', 'alpha', 'beta', 'rc', 'preview', '', '', '', '', '', '', '', '', '', '', ''];
+export function fromSemVersion(version: SemVersion): string {
+    const release = ['-dirty', '-alpha', '-beta', '-rc', '-preview', '', '', '', '', '', '', '', '', '', '', ''];
     const releaseType = (version.build & 0xF0000000) >> 28;
     let descript = release[releaseType];
     if ((version.build & 0xff) > 0) {
         // Dirty builds count the number of commits ahead of a release tag
         if (releaseType == 0)
             descript +=  `+${version.build & 0xff}`;
-        else
+        else if(releaseType != 0xf)
             descript += `${version.build & 0xff}`;
     }
-    return {major: version.major, minor: version.minor, revision: version.revision, descript, commit: null, datetime: null};
-    
+
+    return `${version.major}.${version.minor}.${version.revision}${descript}`;
 }
 
 export interface PaciEventMap {
@@ -218,11 +216,13 @@ export class Paci extends typedEventTarget {
                     this.dispatchEvent(new CustomEvent("firmwareVersion", {
                         detail: {
                             version: {
-                                major: version.major,
-                                minor: version.minor,
-                                revision: version.build,
+                                version: {
+                                    major: version.major,
+                                    minor: version.minor,
+                                    revision: version.revision,
+                                    build: version.build,
+                                },
                                 commit: toHex(version.commit),
-                                descript: version.descript,
                                 datetime: new Date(),
                             }
                         }
@@ -258,13 +258,7 @@ export class Paci extends typedEventTarget {
             this._firmwareVersion = this._getFirmwareVersion();
         }
 
-        return await this._firmwareVersion.then(version => {
-            let result = `${version.major}.${version.minor}.${version.revision}`;
-            if (version.descript != null && version.descript.length > 0) {
-                result += `-${version.descript}`;
-            }
-            return result;
-        });
+        return await this._firmwareVersion.then(version => fromSemVersion(version.version));
     }
 
     async getFirmwareDate(): Promise<Date|null> {

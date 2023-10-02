@@ -153,7 +153,7 @@ function onReady(_: Event)
             idFirmwareValidation.classList.remove('invalid-feedback');
 
             idFirmwareValidation.innerHTML = 
-            `Version: ${version.major}.${version.minor}.${version.revision}-${version.descript}<br>
+            `Version: ${version}<br>
             Hash: <samp>${toHex(firmwareInfo.hash)}</samp> <i class="bi bi-check-lg"></i><br>
             Commit: <samp>${(0xa0 in firmwareInfo.tags) ? toHex(firmwareInfo.tags[0xa0]) : "(unavailable)"}</samp>`;
 
