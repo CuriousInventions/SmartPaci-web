@@ -21,11 +21,25 @@ export interface PaciVersion {
     descript: string|null;
 }
 
+/**
+ * Convert a semantic version (usually returned from McuBoot images) into version objects for the 
+ * Smart Pacifier.
+ *
+ * The descript is encoded into the 32bit-build component of the SemVersion.
+ * @param version 
+ * @returns 
+ */
 export function fromSemVersion(version: SemVersion): PaciVersion {
-    const release = ['dirty', 'alpha', 'beta', 'rc', 'preview', '', '', ''];
-    let descript = release[(version.build & 0x0700) >> 12];
-    if ((version.build & 0xff) > 0)
-        descript +=  (version.build & 0xff).toString();
+    const release = ['dirty', 'alpha', 'beta', 'rc', 'preview', '', '', '', '', '', '', '', '', '', '', ''];
+    const releaseType = (version.build & 0xF0000000) >> 28;
+    let descript = release[releaseType];
+    if ((version.build & 0xff) > 0) {
+        // Dirty builds count the number of commits ahead of a release tag
+        if (releaseType == 0)
+            descript +=  `+${version.build & 0xff}`;
+        else
+            descript += `${version.build & 0xff}`;
+    }
     return {major: version.major, minor: version.minor, revision: version.revision, descript, commit: null, datetime: null};
     
 }
@@ -33,7 +47,9 @@ export function fromSemVersion(version: SemVersion): PaciVersion {
 export interface PaciEventMap {
     'bite': CustomEvent<{value: number}>;
     'suck': CustomEvent<{values: number[]}>;
-    'disconnect': Event;
+    'connected': Event;
+    'disconnected': Event;
+    'reconnecting': Event;
     "nameChanged": CustomEvent<{name: string}>;
     "firmwareVersion": CustomEvent<{version: PaciVersion}>;
     'featuresUpdated': CustomEvent<{features: number}>;
@@ -80,6 +96,9 @@ export class Paci extends typedEventTarget {
     private _firmwareVersion: Promise<PaciVersion> | null;
     private _name: string | null = null;
     private _features: number = 0;
+    private _reconnect = false;
+
+    private _mcuManager = new McuManager();
 
     constructor() {
         super();
@@ -92,6 +111,25 @@ export class Paci extends typedEventTarget {
 
     hasFeature(feature: PaciFeature): boolean {
         return (this._features & feature) != 0;
+    }
+
+    get connected(): boolean {
+        return this._device?.gatt?.connected ?? false;
+    }
+
+    async disconnect(): Promise<void> {
+        this._reconnect = false;
+        this._features = 0;
+        this._mcuManager.disconnect();
+        await this._device?.gatt?.disconnect();
+        this._disconnectSignal.abort();
+    }
+
+    get mcuManager(): McuManager {
+        // if(!this.hasFeature(PaciFeature.McuMgr))
+        //     throw new Error("MCUManger feature is unavailable.");
+
+        return this._mcuManager;
     }
 
     async connect(): Promise<void> {
@@ -107,7 +145,13 @@ export class Paci extends typedEventTarget {
         };
 
         this._device = await navigator.bluetooth.requestDevice(params);
+        await this._connect();
+    }
 
+    private async _connect(): Promise<void> {
+        if (this._device == null)
+            throw new Error("No device selected.");
+        
         // Assign a new abort controller for each new device connection.
         // Abort signal used to clean up event listeners.
         this._disconnectSignal = new AbortController();
@@ -115,11 +159,20 @@ export class Paci extends typedEventTarget {
         this._name = this._device?.name ?? null;
         this.dispatchEvent(new CustomEvent('nameChanged', {detail: {name: this._name}}));
 
-        this._device.addEventListener("gattserverdisconnected", 
-            () => this.dispatchEvent(new Event("disconnected")),
-            {signal: this._disconnectSignal.signal} as any);
+        this._device.addEventListener("gattserverdisconnected", async _ => {
+            if (this._reconnect) {
+                // TODO: Implement a back-off-timer when reconnecting.
+                this.dispatchEvent(new Event("reconnecting"));
+                this._disconnectSignal.abort();
+                await this._connect();
+            } else {
+                this.dispatchEvent(new Event("disconnected"));
+            }
+        }, {signal: this._disconnectSignal.signal} as any);
 
         const server = await this._device.gatt?.connect();
+        this._reconnect = true;
+
         this._service = await server!.getPrimaryService(this.SERVICE_UUID);
         
         // Check to see if the McuMgr service is present.
@@ -127,6 +180,7 @@ export class Paci extends typedEventTarget {
             .then(_ => {
                 this._features |= PaciFeature.McuMgr;
                 this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
+                this._mcuManager.attach(this._device!);
             });
 
         this._controlCharacteristic = await this._service.getCharacteristic(this.CHARACTERISTIC_CONTROL_UUID);
@@ -184,6 +238,8 @@ export class Paci extends typedEventTarget {
         await this._biteCharacteristic.startNotifications();
         await this._suckCharacteristic.startNotifications();
         await this._controlCharacteristic.startNotifications();
+
+        this.dispatchEvent(new Event("connected"));
     }
 
     async getName(): Promise<string> {
@@ -238,10 +294,6 @@ export class Paci extends typedEventTarget {
         await this._controlCharacteristic!.writeValueWithResponse(request.toBinary());
         
         return await p;
-    }
-
-    async disconnect(): Promise<void> {
-        await this._device?.gatt?.disconnect();
     }
 
     private async _sendRequest(request: ControlRequest): Promise<void> {

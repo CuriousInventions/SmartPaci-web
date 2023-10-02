@@ -101,19 +101,19 @@ export class McuManager extends typedEventTarget {
     static readonly SERVICE_UUID = '8d53dc1d-1db7-4cd3-868b-8a527460aa84';
     static readonly CHARACTERISTIC_UUID = 'da2e7828-fbce-4e01-ae9e-261174997c48';
 
-    _mtu: number;
-    _device: BluetoothDevice | null;
-    _service: BluetoothRemoteGATTService | null;
-    _characteristic: BluetoothRemoteGATTCharacteristic | null;
+    private _mtu: number;
+    private _device: BluetoothDevice | null;
+    private _service: BluetoothRemoteGATTService | null;
+    private _characteristic: BluetoothRemoteGATTCharacteristic | null;
     
-    _uploadIsInProgress: boolean;
-    _buffer: Uint8Array;
-    _logger: Logger ;
-    _uploadOffset: number;
-    _seq;
-    _userRequestedDisconnect;
-    _uploadImage: ArrayBuffer | null;
-    _uploadSlot: number;
+    private _uploadIsInProgress: boolean;
+    private _buffer: Uint8Array;
+    private _logger: Logger ;
+    private _uploadOffset: number;
+    private _seq;
+    private _userRequestedDisconnect;
+    private _uploadImage: ArrayBuffer | null;
+    private _uploadSlot: number;
 
     constructor() {
         super()
@@ -133,7 +133,7 @@ export class McuManager extends typedEventTarget {
         this._uploadSlot = 0;
     }
 
-    async _requestDevice(filters?: BluetoothLEScanFilter[]) {
+    private async _requestDevice(filters?: BluetoothLEScanFilter[]) {
         let params : RequestDeviceOptions = filters == undefined
             ? {
                 acceptAllDevices: true,
@@ -241,19 +241,22 @@ export class McuManager extends typedEventTarget {
         const group_hi = group >> 8;
         const message = [op, _flags, length_hi, length_lo, group_hi, group_lo, this._seq, id, ...encodedData];
 
-        // console.log('>'  + message.map(x => x.toString(16).padStart(2, '0')).join(' '));
+        // this._logger.info('>'  + message.map(x => x.toString(16).padStart(2, '0')).join(' '));
         await this._characteristic!.writeValueWithoutResponse(Uint8Array.from(message));
         this._seq = (this._seq + 1) % 256;
     }
-
+    
     private _notification(event: Event) {
         const target = event.target as BluetoothRemoteGATTCharacteristic;
         const message = new Uint8Array(target.value!.buffer);
         this._buffer = new Uint8Array([...this._buffer, ...message]);
         const messageLength = this._buffer[2] * 256 + this._buffer[3];
-
-        if (this._buffer.length < messageLength + 8)
+        
+        // this._logger.info('<'  + [...message].map(x => x.toString(16).padStart(2, '0')).join(' '));
+        if (this._buffer.length < messageLength + 8) {
+            this._logger.error("Ignoring message?!");
             return;
+        }
 
         this._processMessage(this._buffer.slice(0, messageLength + 8));
         this._buffer = this._buffer.slice(messageLength + 8);
@@ -264,11 +267,16 @@ export class McuManager extends typedEventTarget {
         const data = cborg.decode(message.slice(8));
         const length = length_hi * 256 + length_lo;
         const group = group_hi * 256 + group_lo;
-        if (group === GroupId.Image && id === GroupImageId.Upload && data.rc === 0 && data.off) {
+        // Note that "rc" may not be present if it is 0
+        if (data.rc) {
+            this._logger.error("Got a non-zero response code")
+            this._logger.error(`Message: op: ${op}, group: ${group}, id: ${id}, length: ${length}`, data);
+        } else if (group === GroupId.Image && id === GroupImageId.Upload && data.off) {
             this._uploadOffset = data.off;
             this._uploadNext();
             return;
         }
+
         this.dispatchEvent(new CustomEvent('message', {detail: { op, group, id, data, length }}));
     }
 
@@ -301,12 +309,15 @@ export class McuManager extends typedEventTarget {
     }
 
     private async _uploadNext() {
-        if (!this._uploadImage)
+        if (!this._uploadImage) {
+            this._logger.info("No firmware uplaod to do...");
             return;
+        }
 
         if (this._uploadOffset >= this._uploadImage.byteLength) {
             this._uploadIsInProgress = false;
             this.dispatchEvent(new Event('imageUploadFinished'));
+            this._logger.info("Upload finished.");
             return;
         }
 
@@ -335,7 +346,7 @@ export class McuManager extends typedEventTarget {
 
         this._uploadOffset += length;
 
-        this._sendMessage(OpCode.Write, GroupId.Image, GroupImageId.Upload, message);
+        await this._sendMessage(OpCode.Write, GroupId.Image, GroupImageId.Upload, message);
     }
     
     async cmdUpload(image: ArrayBuffer, slot = 0) {
@@ -349,10 +360,10 @@ export class McuManager extends typedEventTarget {
         this._uploadImage = image;
         this._uploadSlot = slot;
 
-        this._uploadNext();
+        await this._uploadNext();
     }
 
-    * _extractTlvs(data: ArrayBuffer): Generator<{tag: number, value: Uint8Array}> {
+    private * _extractTlvs(data: ArrayBuffer): Generator<{tag: number, value: Uint8Array}> {
         const view = new DataView(data);
         let offset = 0;
         while (offset < view.byteLength) {
@@ -412,16 +423,18 @@ export class McuManager extends typedEventTarget {
         const hash = new Uint8Array(await this._hash(image.slice(0, headerSize + imageSize + protected_tlv_lenth)));
         const info = {version, hash, hashValid:false, imageSize, tags: []} as McuImageInfo;
 
-        // TODO: Extract TLV at at the end of the image.
         let offset = headerSize + imageSize;
-        if (view.getUint16(offset, littleEndian) !== 0x6908)
-            throw new Error(`Expected protected TLV magic number. (0x${offset.toString(16)}: 0x${view.getUint16(offset, littleEndian).toString(16)})`);
+        let tlv_end = offset;
+        if (protected_tlv_lenth > 0) {
+            if (view.getUint16(offset, littleEndian) !== 0x6908)
+                throw new Error(`Expected protected TLV magic number. (0x${offset.toString(16)}: 0x${view.getUint16(offset, littleEndian).toString(16)})`);
 
-        let tlv_end = view.getUint16(offset + 2, littleEndian) + offset;
-        for (let tlv of this._extractTlvs(view.buffer.slice(offset + 4, tlv_end))) {
-            info.tags[tlv.tag] = tlv.value;
+            tlv_end = view.getUint16(offset + 2, littleEndian) + offset;
+            for (let tlv of this._extractTlvs(view.buffer.slice(offset + 4, tlv_end))) {
+                info.tags[tlv.tag] = tlv.value;
+            }
+            offset = tlv_end;
         }
-        offset = tlv_end;
         
         if (view.getUint16(offset, littleEndian) !== 0x6907)
             throw new Error(`Expected TLV magic number. (0x${offset.toString(16)}: 0x${view.getUint16(offset, littleEndian).toString(16)})`);
