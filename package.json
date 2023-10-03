@@ -17,7 +17,7 @@
     "vite": "^4.4.5"
   },
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "npm run protoc && tsc && vite build",
     "dev": "vite",
     "preview": "vite preview",
     "protoc": "protoc --plugin ./node_modules/.bin/protoc-gen-es --es_out src/generated --es_opt target=ts ./bluetooth.proto",
