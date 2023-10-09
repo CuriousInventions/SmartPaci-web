@@ -149,6 +149,8 @@ export class Paci extends typedEventTarget {
     private async _connect(): Promise<void> {
         if (this._device == null)
             throw new Error("No device selected.");
+
+        this._firmwareVersion = null;
         
         // Assign a new abort controller for each new device connection.
         // Abort signal used to clean up event listeners.
@@ -212,7 +214,6 @@ export class Paci extends typedEventTarget {
             {
                 case "firmwareVersion":
                     const version = response.response.value as Version;
-                    toHex(version.commit)
                     this.dispatchEvent(new CustomEvent("firmwareVersion", {
                         detail: {
                             version: {
@@ -223,7 +224,7 @@ export class Paci extends typedEventTarget {
                                     build: version.build,
                                 },
                                 commit: toHex(version.commit),
-                                datetime: new Date(),
+                                datetime: new Date(version.timestamp == BigInt(0) ? NaN : (Number(version.timestamp) * 1000)),
                             }
                         }
                     }));

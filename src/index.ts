@@ -28,6 +28,8 @@ function onReady(_: Event)
     const idSuck2Progress = document.getElementById("progSuck2")!;
     const idSuck3Progress = document.getElementById("progSuck3")!;
     const idVersionLabel = document.getElementById("lblVersion")!;
+    const idCommitLabel = document.getElementById("lblCommit")!;
+    const idBuildDateLabel = document.getElementById("lblBuildDate")!;
     const idStatusLabel = document.getElementById("lblStatus")!;
     const idNameLabel = document.getElementById("lblName")!;
     const idReconnecting = document.getElementById("reconnecting")!;
@@ -105,16 +107,9 @@ function onReady(_: Event)
         idDisconnectButton.classList.remove("d-none");
 
         idStatusLabel.innerText = "Connected";
-        let version = await paci.getFirmwareVersion();
-        idVersionLabel.innerText = version;
-        
-        paci.getFirmwareCommit().then(commit => {
-            if (commit.length > 0) {
-                version += ` (${commit})`;
-                idVersionLabel.innerText = version;
-            }
-        });
-
+        paci.getFirmwareVersion().then(version => idVersionLabel.innerText = version);
+        paci.getFirmwareCommit().then(commit =>  idCommitLabel.innerText = (commit.length > 0) ? commit : "");
+        paci.getFirmwareDate().then(date => idBuildDateLabel.innerText = (date != null && !isNaN(date.valueOf())) ? `${date.toDateString()} ${date.toLocaleTimeString()}` : "");
         paci.getName().then(name => idNameLabel.innerText = name);
     });
 
@@ -152,10 +147,17 @@ function onReady(_: Event)
             idFirmwareValidation.classList.add('valid-feedback');
             idFirmwareValidation.classList.remove('invalid-feedback');
 
+            let padded_timestamp = Uint8Array.from([
+                ...Array(8 - firmwareInfo.tags[0xa1]?.length ?? 0).fill(0),
+                ...(firmwareInfo.tags[0xa1] ?? [])
+            ]);
+            const timestamp = new Date(Number(new DataView(padded_timestamp.buffer).getBigUint64(0)));
+
             idFirmwareValidation.innerHTML = 
             `Version: ${version}<br>
             Hash: <samp>${toHex(firmwareInfo.hash)}</samp> <i class="bi bi-check-lg"></i><br>
-            Commit: <samp>${(0xa0 in firmwareInfo.tags) ? toHex(firmwareInfo.tags[0xa0]) : "(unavailable)"}</samp>`;
+            Commit: <samp>${(0xa0 in firmwareInfo.tags) ? toHex(firmwareInfo.tags[0xa0]) : "(unavailable)"}</samp><br>
+            Built: <et>${timestamp}</et>`;
 
             firmwareFile = file;
 
