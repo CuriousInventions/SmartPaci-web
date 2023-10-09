@@ -100,6 +100,7 @@ const typedEventTarget = EventTarget as {new(): McuMgrEventTarget; prototype: Mc
 export class McuManager extends typedEventTarget {
     static readonly SERVICE_UUID = '8d53dc1d-1db7-4cd3-868b-8a527460aa84';
     static readonly CHARACTERISTIC_UUID = 'da2e7828-fbce-4e01-ae9e-261174997c48';
+    static readonly SMP_HEADER_SIZE = 8;
 
     private _mtu: number;
     private _device: BluetoothDevice | null;
@@ -115,10 +116,10 @@ export class McuManager extends typedEventTarget {
     private _uploadImage: ArrayBuffer | null;
     private _uploadSlot: number;
 
-    constructor() {
+    constructor(options?: {mtu?: number}) {
         super()
 
-        this._mtu = 140;
+        this._mtu = options?.mtu ?? 140;
         this._device = null;
         this._service = null;
         this._characteristic = null;
@@ -253,13 +254,13 @@ export class McuManager extends typedEventTarget {
         const messageLength = this._buffer[2] * 256 + this._buffer[3];
         
         // this._logger.info('<'  + [...message].map(x => x.toString(16).padStart(2, '0')).join(' '));
-        if (this._buffer.length < messageLength + 8) {
+        if (this._buffer.length < messageLength + McuManager.SMP_HEADER_SIZE) {
             this._logger.error("Ignoring message?!");
             return;
         }
 
-        this._processMessage(this._buffer.slice(0, messageLength + 8));
-        this._buffer = this._buffer.slice(messageLength + 8);
+        this._processMessage(this._buffer.slice(0, messageLength + McuManager.SMP_HEADER_SIZE));
+        this._buffer = this._buffer.slice(messageLength + McuManager.SMP_HEADER_SIZE);
     }
 
     private _processMessage(message: Uint8Array) {

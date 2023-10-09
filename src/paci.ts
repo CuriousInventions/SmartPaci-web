@@ -96,7 +96,7 @@ export class Paci extends typedEventTarget {
     private _features: number = 0;
     private _reconnect = false;
 
-    private _mcuManager = new McuManager();
+    private _mcuManager = new McuManager({mtu: 372});
 
     constructor() {
         super();
