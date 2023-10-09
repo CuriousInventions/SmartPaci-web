@@ -151,13 +151,15 @@ function onReady(_: Event)
                 ...Array(8 - firmwareInfo.tags[0xa1]?.length ?? 0).fill(0),
                 ...(firmwareInfo.tags[0xa1] ?? [])
             ]);
-            const timestamp = new Date(Number(new DataView(padded_timestamp.buffer).getBigUint64(0)));
+
+            const timestamp = new DataView(padded_timestamp.buffer).getBigUint64(0);
+            const date = new Date(Number(timestamp) * 1000);
 
             idFirmwareValidation.innerHTML = 
             `Version: ${version}<br>
             Hash: <samp>${toHex(firmwareInfo.hash)}</samp> <i class="bi bi-check-lg"></i><br>
             Commit: <samp>${(0xa0 in firmwareInfo.tags) ? toHex(firmwareInfo.tags[0xa0]) : "(unavailable)"}</samp><br>
-            Built: <et>${timestamp}</et>`;
+            Built: <et>${date}</et>`;
 
             firmwareFile = file;
 
