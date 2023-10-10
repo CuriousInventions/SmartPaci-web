@@ -132,34 +132,18 @@ function onReady(_: Event)
             if (file == null)
                 return;
 
-            if (file.size > 10_000_000)
-                throw new Error("File is too large.");
-
-            const manager = new McuManager();
-            const fileData = await file.arrayBuffer();
-            firmwareInfo = await manager.imageInfo(fileData);
-            const version = fromSemVersion(firmwareInfo.version);
-
-            if (!firmwareInfo.hashValid)
-                throw new Error(`Invalid hash: ${toHex(firmwareInfo.hash)}`)
+            const firmwareInfo = await paci.getFirmwareInfo(file);
 
             idFirmwareFile.classList.add('is-valid');
             idFirmwareValidation.classList.add('valid-feedback');
             idFirmwareValidation.classList.remove('invalid-feedback');
 
-            let padded_timestamp = Uint8Array.from([
-                ...Array(8 - firmwareInfo.tags[0xa1]?.length ?? 0).fill(0),
-                ...(firmwareInfo.tags[0xa1] ?? [])
-            ]);
-
-            const timestamp = new DataView(padded_timestamp.buffer).getBigUint64(0);
-            const date = new Date(Number(timestamp) * 1000);
-
             idFirmwareValidation.innerHTML = 
-            `Version: ${version}<br>
-            Hash: <samp>${toHex(firmwareInfo.hash)}</samp> <i class="bi bi-check-lg"></i><br>
-            Commit: <samp>${(0xa0 in firmwareInfo.tags) ? toHex(firmwareInfo.tags[0xa0]) : "(unavailable)"}</samp><br>
-            Built: <et>${date}</et>`;
+            `Version: ${firmwareInfo.version}<br>
+            Hash: <samp>${firmwareInfo.hash}</samp> <i class="bi bi-check-lg"></i><br>
+            Commit: <samp>${firmwareInfo.version.commit}</samp><br>
+            Built: <et>${firmwareInfo.version.datetime}</et><br>
+            Size: <et>${firmwareInfo.fileSize.toLocaleString()} bytes</et>`;
 
             firmwareFile = file;
 
