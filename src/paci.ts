@@ -12,13 +12,6 @@ export enum CalibrationType {
     Max,
 }
 
-export interface PaciVersion {
-    version: SemVersion;
-    commit: string|null;
-    datetime: Date|null;
-    descript: string|null;
-}
-
 /**
  * Convert a semantic version (usually returned from McuBoot images) into version objects for the 
  * Smart Pacifier.
@@ -27,20 +20,44 @@ export interface PaciVersion {
  * @param version 
  * @returns 
  */
-export function fromSemVersion(version: SemVersion): string {
-    const release = ['-dirty', '-alpha', '-beta', '-rc', '-preview', '', '', '', '', '', '', '', '', '', '', ''];
-    const releaseType = (version.build & 0xF0000000) >> 28;
-    let descript = release[releaseType];
-    if ((version.build & 0xff) > 0) {
-        // Dirty builds count the number of commits ahead of a release tag
-        if (releaseType == 0)
-            descript +=  `+${version.build & 0xff}`;
-        else if(releaseType != 0xf)
-            descript += `${version.build & 0xff}`;
+export class PaciVersion {
+    private _version: SemVersion;
+    commit: string|null;
+    datetime: Date;
+    variant: string;
+
+    constructor(version: SemVersion, commit: string = "", datetime?: Date) {
+        this._version = version;
+        this.commit = commit;
+        this.datetime = datetime ?? new Date(NaN);
+
+        const release = ['dirty', 'alpha', 'beta', 'rc', 'preview'];
+        const releaseType = (this._version.build & 0xF0000000) >> 28;
+        this.variant = releaseType in release ? release[releaseType] : '';
     }
 
-    return `${version.major}.${version.minor}.${version.revision}${descript}`;
+    toString(): string {
+        const releaseType = (this._version.build & 0xF0000000) >> 28;
+        let descript = (this.variant.length > 0) ? `-${this.variant}` : '';
+
+        if ((this._version.build & 0xff) > 0) {
+            // Dirty builds count the number of commits ahead of a release tag
+            if (releaseType == 0)
+                descript +=  `+${this._version.build & 0xff}`;
+            else if(releaseType != 0xf)
+                descript += `${this._version.build & 0xff}`;
+        }
+
+        return `${this._version.major}.${this._version.minor}.${this._version.revision}${descript}`;
+    }
 }
+
+type FirmwareInfo = {
+    version: PaciVersion,
+    hash: string,
+    size: number,
+    fileSize: number,
+};
 
 export interface PaciEventMap {
     'bite': CustomEvent<{value: number}>;
@@ -318,5 +335,32 @@ export class Paci extends typedEventTarget {
         request.request = {case: "calibrateSensor", value: calibrateMsg};
 
         return await this._sendRequest(request);
+    }
+
+    async getFirmwareInfo(file: File): Promise<FirmwareInfo> {
+        if (file.size > 10_000_000)
+            throw new Error("File is too large.");
+
+        const fileData = await file.arrayBuffer();
+        const firmwareInfo = await this._mcuManager.imageInfo(fileData);
+
+        if (!firmwareInfo.hashValid)
+            throw new Error(`Invalid hash: ${toHex(firmwareInfo.hash)}`)
+
+        let padded_timestamp = Uint8Array.from([
+            ...Array(8 - firmwareInfo.tags[0xa1]?.length ?? 0).fill(0),
+            ...(firmwareInfo.tags[0xa1] ?? [])
+        ]);
+
+        const timestamp = new DataView(padded_timestamp.buffer).getBigUint64(0);
+        const date = new Date(Number(timestamp) * 1000);
+        const commit = 0xa0 in firmwareInfo.tags ? toHex(firmwareInfo.tags[0xa0]) : '';
+
+        return {
+            version: new PaciVersion(firmwareInfo.version, commit, date),
+            hash: toHex(firmwareInfo.hash),
+            size: firmwareInfo.imageSize,
+            fileSize: fileData.byteLength,
+        };
     }
 }
