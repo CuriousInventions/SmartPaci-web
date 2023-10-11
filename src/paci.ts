@@ -233,16 +233,16 @@ export class Paci extends typedEventTarget {
                     const version = response.response.value as Version;
                     this.dispatchEvent(new CustomEvent("firmwareVersion", {
                         detail: {
-                            version: {
-                                version: {
+                            version: new PaciVersion(
+                                {
                                     major: version.major,
                                     minor: version.minor,
                                     revision: version.revision,
                                     build: version.build,
                                 },
-                                commit: toHex(version.commit),
-                                datetime: new Date(version.timestamp == BigInt(0) ? NaN : (Number(version.timestamp) * 1000)),
-                            }
+                                toHex(version.commit),
+                                new Date(version.timestamp == BigInt(0) ? NaN : (Number(version.timestamp) * 1000)),
+                            ),
                         }
                     }));
 
@@ -276,7 +276,7 @@ export class Paci extends typedEventTarget {
             this._firmwareVersion = this._getFirmwareVersion();
         }
 
-        return await this._firmwareVersion.then(version => fromSemVersion(version.version));
+        return await this._firmwareVersion.then(version => version.toString());
     }
 
     async getFirmwareDate(): Promise<Date|null> {
