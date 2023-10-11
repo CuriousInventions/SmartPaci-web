@@ -23,10 +23,7 @@ function onReady(_: Event)
     const idConnectButton = document.getElementById("btnDeviceConnect")!;
     const idDisconnectButton = document.getElementById("btnDeviceDisconnect")!;
     const idBiteProgress = document.getElementById("progBite")!;
-    const idSuck0Progress = document.getElementById("progSuck0")!;
-    const idSuck1Progress = document.getElementById("progSuck1")!;
-    const idSuck2Progress = document.getElementById("progSuck2")!;
-    const idSuck3Progress = document.getElementById("progSuck3")!;
+    const idSuckProgress = document.getElementById("progSuck")!;
     const idVersionLabel = document.getElementById("lblVersion")!;
     const idCommitLabel = document.getElementById("lblCommit")!;
     const idBuildDateLabel = document.getElementById("lblBuildDate")!;
@@ -86,10 +83,7 @@ function onReady(_: Event)
     });
 
     paci.addEventListener("suck", event => {
-        idSuck0Progress.style.width = ((event.detail.values[0] / 255) * 100) + "%";
-        idSuck1Progress.style.width = ((event.detail.values[1] / 255) * 100) + "%";
-        idSuck2Progress.style.width = ((event.detail.values[2] / 255) * 100) + "%";
-        idSuck3Progress.style.width = ((event.detail.values[3] / 255) * 100) + "%";
+        idSuckProgress.style.width = ((event.detail.values[0] / 255) * 100) + "%";
     });
 
     // Connect to the paci!
