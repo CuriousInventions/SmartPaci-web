@@ -1,4 +1,4 @@
-import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor } from "./generated/bluetooth_pb";
+import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor, FeaturesRequest, FeatureResponse, FeatureResponse_Feature } from "./generated/bluetooth_pb";
 import {toHex} from "@smithy/util-hex-encoding";
 import { McuManager, SemVersion } from "./mcumgr";
 
@@ -73,7 +73,8 @@ export interface PaciEventMap {
 // A bitmap of supported eatures a device may have.
 // Each variant must be a bit shited value.
 export enum PaciFeature {
-    McuMgr = 1<<0,
+    McuMgr = 1 << 0,
+    Debug  = 1 << 1,
 }
 
 // Helper interface to superimpose our custom events (and Event types) to the EventTarget
@@ -247,6 +248,20 @@ export class Paci extends typedEventTarget {
                     }));
 
                     break;
+                case "feature":
+                    const features = response.response.value as FeatureResponse;
+                    for(let feature of features.features) {
+                        switch(feature) {
+                            case FeatureResponse_Feature.Debug:
+                                this._features |= PaciFeature.Debug;
+                                break;
+                            default:
+                                console.warn("Unsupported feature detected", feature);
+                                break;
+                        }
+                    }
+                    this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
+                    break;
                 default:
                     console.log(`Unsupported response (${response.response.case})`, response);
                     return;
@@ -257,7 +272,20 @@ export class Paci extends typedEventTarget {
         await this._suckCharacteristic.startNotifications();
         await this._controlCharacteristic.startNotifications();
 
+        await this._refreshFeatures();
         this.dispatchEvent(new Event("connected"));
+
+    }
+
+    async _refreshFeatures():Promise<void> {
+        let request = new ControlRequest({
+            request: {
+                case: 'feature',
+                value: new FeaturesRequest(),
+            },
+        });
+
+        await this._controlCharacteristic!.writeValueWithResponse(request.toBinary());
     }
 
     async getName(): Promise<string> {

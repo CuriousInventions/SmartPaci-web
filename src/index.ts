@@ -1,7 +1,11 @@
 // import {MCUManager} from "./mcumgr";
-import {CalibrationType, InputType, Paci, PaciFeature, fromSemVersion} from "./paci";
+import {CalibrationType, InputType, Paci, PaciFeature} from "./paci";
 import '@popperjs/core';
 import * as bootstrap from 'bootstrap';
+
+// TODO: Import specific echarts modules to reduce final bundled js size.
+import * as echarts from 'echarts';
+
 import 'bootstrap-icons/font/bootstrap-icons.css'
 
 import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
@@ -17,20 +21,29 @@ function onReady(_: Event)
     // const mgr = new MCUManager();
     const paci = new Paci();
     
+    // Buttons
     const idCalibrateSuckMinButton = document.getElementById("btnCalibrateSuckMin")!;
     const idCalibrateSuckMaxButton = document.getElementById("btnCalibrateSuckMax")!;
     const idMcuMgmtButton = document.getElementById("btnMcuMgr")!;
+    const idSensorNavBar = document.getElementById("navSensor")!;
     const idConnectButton = document.getElementById("btnDeviceConnect")!;
     const idDisconnectButton = document.getElementById("btnDeviceDisconnect")!;
+
     const idBiteProgress = document.getElementById("progBite")!;
     const idSuckProgress = document.getElementById("progSuck")!;
+
+    // Labels
     const idVersionLabel = document.getElementById("lblVersion")!;
     const idCommitLabel = document.getElementById("lblCommit")!;
     const idBuildDateLabel = document.getElementById("lblBuildDate")!;
     const idStatusLabel = document.getElementById("lblStatus")!;
     const idNameLabel = document.getElementById("lblName")!;
     const idReconnecting = document.getElementById("reconnecting")!;
+
+    // Advanced Sensor Panel
+    const sensorGraph = echarts.init(document.getElementById("sensorGraph"));
     
+    // Mcu Management 
     const idFirmwareFile = document.getElementById("fileFirmware")! as HTMLInputElement;
     const idUploadFirmwareButton = document.getElementById("btnUploadFirmware")! as HTMLButtonElement;
     const idUploadButtonValidation = document.getElementById("btnUploadFirmwareValidation")! as HTMLElement;
@@ -40,11 +53,58 @@ function onReady(_: Event)
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
+    const now = Date.now();
+    const graphTimeSpan = 30; // seconds
+    // Initialise the chart
+    let sensorGraphOptions = {
+        title: {
+            text: '🤷‍♀️',
+        },
+        tooltip: {
+            trigger: 'axis'
+        },
+        xAxis: {
+            type: 'time',
+            minInterval: 1000,
+            axisLabel: {
+                formatter: (value: number, index: Number): string => {
+                    
+                    const diff = value - now;
+                    return Math.round(diff / 1000).toString();
+                },
+            },
+        },
+        dataZoom: {
+            type: 'slider',
+            startValue: now - graphTimeSpan * 1000,
+        },
+        yAxis: {
+            type: 'value',
+            min: 0,
+            max: 255,
+        },
+        grid: {
+            right: '20rem',
+        },
+        series: [
+            {
+                name: 'raw',
+                type: 'line',
+                data: [
+                    [now - (graphTimeSpan * 1000), undefined],
+                    [now, undefined],
+                ],
+            },
+        ],
+    };
+    sensorGraph.setOption(sensorGraphOptions);
+
     function resetUi() {
         idStatusLabel.innerText = "Disconnected";
         idDisconnectButton.classList.add("d-none");
         idConnectButton.classList.remove("d-none");
         idMcuMgmtButton.classList.add("d-none");
+        // idSensorNavBar.classList.add("d-none");
         idUploadFirmwareButton.disabled = true;
         idReconnecting.classList.add("d-none");
     }
@@ -72,7 +132,10 @@ function onReady(_: Event)
 
     paci.addEventListener("featuresUpdated", _ => {
         if (paci.hasFeature(PaciFeature.McuMgr)) {
-            idMcuMgmtButton.style.display = "";
+            idMcuMgmtButton.classList.remove("d-none");
+        }
+        if (paci.hasFeature(PaciFeature.Debug)) {
+            idSensorNavBar.classList.remove("d-none");
         }
 
         tryEnableUpdateButton();
