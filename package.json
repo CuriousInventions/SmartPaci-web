@@ -14,6 +14,7 @@
     "ts-protoc-gen": "^0.15.0"
   },
   "devDependencies": {
+    "run-script-os": "^1.1.6",
     "typescript": "^5.2.2",
     "vite": "^4.4.5"
   },
@@ -21,7 +22,9 @@
     "build": "npm run protoc && tsc && vite build",
     "dev": "vite",
     "preview": "vite preview",
-    "protoc": "protoc --plugin ./node_modules/.bin/protoc-gen-es --es_out src/generated --es_opt target=ts ./bluetooth.proto",
+    "protoc": "run-script-os",
+    "protoc:default": "protoc --plugin ./node_modules/.bin/protoc-gen-es --es_out src/generated --es_opt target=ts ./bluetooth.proto",
+    "protoc:win32": "protoc --plugin ./node_modules/.bin/protoc-gen-es.cmd --es_out src/generated --es_opt target=ts ./bluetooth.proto",
     "tsc": "tsc"
   }
 }
