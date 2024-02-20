@@ -1,5 +1,5 @@
 // import {MCUManager} from "./mcumgr";
-import {CalibrationType, InputType, Paci, PaciFeature, fromSemVersion} from "./paci";
+import {CalibrationType, InputType, Paci, PaciFeature} from "./paci";
 import '@popperjs/core';
 import * as bootstrap from 'bootstrap';
 import 'bootstrap-icons/font/bootstrap-icons.css'
