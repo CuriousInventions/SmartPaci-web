@@ -85,6 +85,9 @@ function onReady(_: Event)
     paci.addEventListener("suck", event => {
         idSuckProgress.style.width = ((event.detail.values[0] / 255) * 100) + "%";
     });
+    paci.addEventListener("touch", event => {
+        console.log("Touched pads:", event.detail.values);
+    });
 
     // Connect to the paci!
     idConnectButton.addEventListener('click', async _ => {

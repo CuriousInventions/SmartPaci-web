@@ -22,8 +22,38 @@ message CalibrateSensor {
     Sensor sensor = 1;
 }
 
-message VersionRequest {
+message SensorReadings {
+    enum Sensor {
+        None = 0;
+        Bite = 1;
+        Suck = 2;
+        MouthTemp = 3;
+        PaciTemp = 4;
+        Buttons = 5; // Bitmap of buttons pressed.
+    }
 
+    message SensorValue {
+        Sensor sensor = 1;
+        int32 value = 2; // Normalised unsigned value between 0.0 and 1.0 (no need for a float)
+
+        int32 raw = 10; // Raw value (unprocessed) from sensor1 - for debugging purposes only
+    }
+
+    repeated SensorValue sensors = 1;
+}
+
+message FeatureResponse {
+    enum Feature {
+        Debug = 0;
+
+    }
+    repeated Feature features = 1;
+}
+
+message VersionRequest {
+}
+
+message FeaturesRequest {
 }
 
 // Requests sent to the control enpoint.
@@ -32,6 +62,7 @@ message ControlRequest {
         CalibrateSensor calibrate_sensor = 1;
         VersionRequest firmware_version = 2;
         VersionRequest hardware_version = 3;
+        FeaturesRequest feature = 4;
     }
 }
 
@@ -39,5 +70,7 @@ message ControlResponse {
     oneof response {
         Version firmware_version = 1;
         Version hardware_version = 2;
+        SensorReadings sensor_readings = 3;
+        FeatureResponse feature = 4;
     }
 }

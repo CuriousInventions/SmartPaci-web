@@ -1,4 +1,4 @@
-import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor } from "./generated/bluetooth_pb";
+import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor, SensorReadings } from "./generated/bluetooth_pb";
 import {toHex} from "@smithy/util-hex-encoding";
 import { McuManager, SemVersion } from "./mcumgr";
 
@@ -62,6 +62,7 @@ type FirmwareInfo = {
 export interface PaciEventMap {
     'bite': CustomEvent<{value: number}>;
     'suck': CustomEvent<{values: number[]}>;
+    'touch': CustomEvent<{values: number[]}>;
     'connected': Event;
     'disconnected': Event;
     'reconnecting': Event;
@@ -99,12 +100,14 @@ export class Paci extends typedEventTarget {
     readonly CHARACTERISTIC_CONTROL_UUID = "abbd1ef1-62e8-493b-8549-8cb891483e20";
     readonly CHARACTERISTIC_FORCE_UUID   = "abbd1ef2-62e8-493b-8549-8cb891483e20";
     readonly CHARACTERISTIC_BITE_UUID    = "abbd1ef3-62e8-493b-8549-8cb891483e20";
+    readonly CHARACTERISTIC_TOUCH_UUID    = "abbd1ef4-62e8-493b-8549-8cb891483e20";
 
     private _device: BluetoothDevice | null;
     private _service: BluetoothRemoteGATTService | undefined;
     private _controlCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
     private _biteCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
     private _suckCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
+    private _touchCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
 
     private _disconnectSignal: AbortController;
 
@@ -171,6 +174,7 @@ export class Paci extends typedEventTarget {
         
         // Assign a new abort controller for each new device connection.
         // Abort signal used to clean up event listeners.
+        this._disconnectSignal?.abort();
         this._disconnectSignal = new AbortController();
 
         this._name = this._device?.name ?? null;
@@ -188,12 +192,15 @@ export class Paci extends typedEventTarget {
         }, {signal: this._disconnectSignal.signal} as any);
 
         const server = await this._device.gatt?.connect();
+        if (server === undefined)
+            return;
+        
         this._reconnect = true;
 
-        this._service = await server!.getPrimaryService(this.SERVICE_UUID);
+        this._service = await server.getPrimaryService(this.SERVICE_UUID);
         
         // Check to see if the McuMgr service is present.
-        server!.getPrimaryService(McuManager.SERVICE_UUID)
+        await server!.getPrimaryService(McuManager.SERVICE_UUID)
             .then(_ => {
                 this._features |= PaciFeature.McuMgr;
                 this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
@@ -203,6 +210,7 @@ export class Paci extends typedEventTarget {
         this._controlCharacteristic = await this._service.getCharacteristic(this.CHARACTERISTIC_CONTROL_UUID);
         this._biteCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_BITE_UUID);
         this._suckCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_FORCE_UUID);
+        this._touchCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_TOUCH_UUID);
 
         this._biteCharacteristic.addEventListener('characteristicvaluechanged', event => {
             const char = event.target as BluetoothRemoteGATTCharacteristic;
@@ -218,6 +226,19 @@ export class Paci extends typedEventTarget {
             }
 
             this.dispatchEvent(new CustomEvent("suck", {detail: {values: forces}}));
+        }, {signal: this._disconnectSignal.signal} as any);
+
+        this._touchCharacteristic.addEventListener('characteristicvaluechanged', event => {
+            const char = event.target as BluetoothRemoteGATTCharacteristic;
+            const touch_bitmap: number = char.value?.getUint8(0) ?? 0;
+            const touches: number[] = [];
+            for(let i = 0; i < 8; i++) {
+                if ((touch_bitmap & (1<<i)) != 0) {
+                    touches.push(i);
+                }
+            }
+            
+            this.dispatchEvent(new CustomEvent("touch", {detail: {values: touches}}));
         }, {signal: this._disconnectSignal.signal} as any);
 
         this._controlCharacteristic.addEventListener('characteristicvaluechanged', event => {
@@ -247,6 +268,9 @@ export class Paci extends typedEventTarget {
                     }));
 
                     break;
+                case "sensorReadings":
+                    const sensorReadings = response.response.value as SensorReadings;
+                    break;
                 default:
                     console.log(`Unsupported response (${response.response.case})`, response);
                     return;
@@ -255,6 +279,7 @@ export class Paci extends typedEventTarget {
 
         await this._biteCharacteristic.startNotifications();
         await this._suckCharacteristic.startNotifications();
+        await this._touchCharacteristic.startNotifications();
         await this._controlCharacteristic.startNotifications();
 
         this.dispatchEvent(new Event("connected"));
