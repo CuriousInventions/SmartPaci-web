@@ -1,6 +1,6 @@
 import { ControlRequest, CalibrateSensor, VersionRequest, ControlResponse, Version, CalibrateSensor_Sensor, SensorReadings } from "./generated/bluetooth_pb";
 import {toHex} from "@smithy/util-hex-encoding";
-import { McuManager, SemVersion } from "./mcumgr";
+import { GroupId, GroupImageId, McuImageStat, McuManager, McuMgrMessage, SemVersion } from "./mcumgr";
 
 export enum InputType {
     Bite,
@@ -22,13 +22,15 @@ export enum CalibrationType {
  */
 export class PaciVersion {
     private _version: SemVersion;
-    commit: string|null;
+    commit: string;
     datetime: Date;
     variant: string;
+    hash: string;
 
-    constructor(version: SemVersion, commit: string = "", datetime?: Date) {
+    constructor(version: SemVersion, commit: string = "", datetime?: Date, hash: string = "") {
         this._version = version;
         this.commit = commit;
+        this.hash = hash;
         this.datetime = datetime ?? new Date(NaN);
 
         const release = ['dirty', 'alpha', 'beta', 'rc', 'preview'];
@@ -52,9 +54,10 @@ export class PaciVersion {
     }
 }
 
-type FirmwareInfo = {
+export type FirmwareInfo = {
     version: PaciVersion,
     hash: string,
+    hashValid: boolean,
     size: number,
     fileSize: number,
 };
@@ -125,6 +128,34 @@ export class Paci extends typedEventTarget {
         this._firmwareVersion = null;
 
         this._disconnectSignal = new AbortController();
+        this._mcuManager.addEventListener("connteded", this.onMcuManagerConnected.bind(this));
+        this._mcuManager.addEventListener("message", this.onMcuManagerMessage.bind(this));
+    }
+
+    private async onMcuManagerConnected(_: Event): Promise<void> {
+        await this._mcuManager.cmdImageState();
+    }
+    private async onMcuManagerMessage(event: CustomEvent<McuMgrMessage>): Promise<void> {
+        switch(event.detail.group) {
+            case GroupId.Image:
+                switch(event.detail.id) {
+                    case GroupImageId.State:
+                        // This is where we can store information about other firmware images on the device.
+                        const images = event.detail.data.images as McuImageStat[];
+
+                        // If the firmware that's running was just updated. We can use the assumption
+                        // a successful bluetooth connection is good enough to mark it as successful.
+                        if (images[0].active && !images[0].confirmed) {
+                            await this._mcuManager.cmdImageConfirm(images[0].hash);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     hasFeature(feature: PaciFeature): boolean {
@@ -203,8 +234,8 @@ export class Paci extends typedEventTarget {
         await server!.getPrimaryService(McuManager.SERVICE_UUID)
             .then(_ => {
                 this._features |= PaciFeature.McuMgr;
-                this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
                 this._mcuManager.attach(this._device!);
+                this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
             });
 
         this._controlCharacteristic = await this._service.getCharacteristic(this.CHARACTERISTIC_CONTROL_UUID);
@@ -263,6 +294,7 @@ export class Paci extends typedEventTarget {
                                 },
                                 toHex(version.commit),
                                 new Date(version.timestamp == BigInt(0) ? NaN : (Number(version.timestamp) * 1000)),
+                                toHex(version.hash),
                             ),
                         }
                     }));
@@ -384,6 +416,7 @@ export class Paci extends typedEventTarget {
         return {
             version: new PaciVersion(firmwareInfo.version, commit, date),
             hash: toHex(firmwareInfo.hash),
+            hashValid: firmwareInfo.hashValid,
             size: firmwareInfo.imageSize,
             fileSize: fileData.byteLength,
         };

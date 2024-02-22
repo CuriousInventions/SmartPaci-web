@@ -136,14 +136,27 @@
                         </div>
                     </div>
                     <div class="carousel-item">
-                        <div class="modal-header">
-                            <h1 class="modal-title fs-5">Firmware Update Complete!</h1>
+                        <div id="dialogUploadSuccess">
+                            <div class="modal-header">
+                                <h1 class="modal-title fs-5">Firmware Update Complete!</h1>
+                            </div>
+                            <div class="modal-body">
+                                <p>All done! 🎉</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-success" data-bs-dismiss="modal">Close</button>
+                            </div>
                         </div>
-                        <div class="modal-body">
-                            <p>All done! 🎉</p>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-success" data-bs-dismiss="modal">Close</button>
+                        <div id="dialogUploadFail">
+                            <div class="modal-header">
+                                <h1 class="modal-title fs-5">Firmware Update Failed</h1>
+                            </div>
+                            <div class="modal-body">
+                                <p>Something appears to gave gone wrong. The device isn't running the firmware we just uploaded...</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Close</button>
+                            </div>
                         </div>
                     </div>
                 </div>

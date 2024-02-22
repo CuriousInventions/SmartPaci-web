@@ -51,7 +51,7 @@ export interface McuMgrMessage {
     readonly op: number;
     readonly group: number;
     readonly id: number;
-    readonly data: number;
+    readonly data: {images: McuImageStat[]}|any;
     readonly length: number;
 }
 
@@ -60,6 +60,21 @@ export type SemVersion = {
     minor: number;
     revision: number;
     build: number;
+}
+
+export interface McuImageStat {
+    /** Is the current image actively running. */
+    readonly active: boolean;
+    readonly bootable: boolean;
+    /** If the image is not confirmed, the bootloader will revert to the other image on reboot. */
+    readonly confirmed: boolean;
+    /** The SHA256 hash of the firmware image. */
+    readonly hash: Uint8Array;
+    /** If true, the bootloader will boot into this image on next reboot. */
+    readonly pending: boolean;
+    readonly permanent: boolean;
+    readonly slot: number;
+    readonly version: SemVersion;
 }
 
 export type McuImageInfo = {
@@ -229,7 +244,7 @@ export class McuManager extends typedEventTarget {
         return this._device?.name ?? null;
     }
 
-    private async _sendMessage(op: number, group: number, id: number, data?: any) {
+    private async _sendMessage(op: number, group: number, id: number, data?: any): Promise<void> {
         const _flags = 0;
         let encodedData: number[] = [];
         if (data) {
@@ -281,27 +296,27 @@ export class McuManager extends typedEventTarget {
         this.dispatchEvent(new CustomEvent('message', {detail: { op, group, id, data, length }}));
     }
 
-    cmdReset() {
+    cmdReset(): Promise<void> {
         return this._sendMessage(OpCode.Write, GroupId.OS, GroupOSId.Reset);
     }
     
-    smpEcho(message: string) {
+    smpEcho(message: string): Promise<void> {
         return this._sendMessage(OpCode.Write, GroupId.OS, GroupOSId.Echo, { d: message });
     }
     
-    cmdImageState() {
+    cmdImageState(): Promise<void> {
         return this._sendMessage(OpCode.Read, GroupId.Image, GroupImageId.State);
     }
     
-    cmdImageErase() {
+    cmdImageErase(): Promise<void> {
         return this._sendMessage(OpCode.Write, GroupId.Image, GroupImageId.Erase, {});
     }
     
-    cmdImageTest(hash: Uint8Array) {
+    cmdImageTest(hash: Uint8Array): Promise<void> {
         return this._sendMessage(OpCode.Write, GroupId.Image, GroupImageId.State, { hash, confirm: false });
     }
     
-    cmdImageConfirm(hash: Uint8Array) {
+    cmdImageConfirm(hash: Uint8Array): Promise<void> {
         return this._sendMessage(OpCode.Write, GroupId.Image, GroupImageId.State, { hash, confirm: true });
     }
 

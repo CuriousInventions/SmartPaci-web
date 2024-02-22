@@ -1,16 +1,15 @@
 // import {MCUManager} from "./mcumgr";
-import {CalibrationType, InputType, Paci, PaciFeature} from "./paci";
+import {CalibrationType, InputType, Paci, PaciFeature, FirmwareInfo} from "./paci";
 import '@popperjs/core';
 import * as bootstrap from 'bootstrap';
 import 'bootstrap-icons/font/bootstrap-icons.css'
 
 import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
 import './style.css'
-import { McuImageInfo, McuManager } from "./mcumgr";
-import { toHex } from "@smithy/util-hex-encoding";
+import { fromHex } from "@smithy/util-hex-encoding";
 
 let firmwareFile: File|null = null;
-let firmwareInfo: McuImageInfo|null = null;
+let firmwareInfo: FirmwareInfo|null = null;
 
 function onReady(_: Event)
 {
@@ -129,20 +128,21 @@ function onReady(_: Event)
             if (file == null)
                 return;
 
-            const firmwareInfo = await paci.getFirmwareInfo(file);
+            const info = await paci.getFirmwareInfo(file);
 
             idFirmwareFile.classList.add('is-valid');
             idFirmwareValidation.classList.add('valid-feedback');
             idFirmwareValidation.classList.remove('invalid-feedback');
 
             idFirmwareValidation.innerHTML = 
-            `Version: ${firmwareInfo.version}<br>
-            Hash: <samp>${firmwareInfo.hash}</samp> <i class="bi bi-check-lg"></i><br>
-            Commit: <samp>${firmwareInfo.version.commit}</samp><br>
-            Built: <et>${firmwareInfo.version.datetime}</et><br>
-            Size: <et>${firmwareInfo.fileSize.toLocaleString()} bytes</et>`;
+            `Version: ${info.version}<br>
+            Hash: <samp>${info.hash}</samp> <i class="bi ${info.hashValid ? "bi-check-lg" : "bi-cross-lg"}"></i><br>
+            Commit: <samp>${info.version.commit}</samp><br>
+            Built: <et>${info.version.datetime}</et><br>
+            Size: <et>${info.fileSize.toLocaleString()} bytes</et>`;
 
             firmwareFile = file;
+            firmwareInfo = info;
 
             tryEnableUpdateButton();
         }
@@ -193,12 +193,21 @@ function onReady(_: Event)
             uploadProgress.innerText = uploadProgress.style.width = progress;
         }, {signal: finished.signal});
 
-        mcuManager.addEventListener('imageUploadFinished', _ => {
+        mcuManager.addEventListener('imageUploadFinished', async _ => {
             finished.abort();
             carousel.next();
-            mcuManager.cmdReset();
 
-            paci.addEventListener('connected', async _ => {
+            await mcuManager.cmdImageTest(fromHex(firmwareInfo!.hash));
+            await mcuManager.cmdReset();
+
+            paci.addEventListener('firmwareVersion', event => {
+                if (event.detail.version.hash == firmwareInfo!.hash) {
+                    document.getElementById("dialogUploadFail")!.classList.add("d-none");
+                    document.getElementById("dialogUploadSuccess")!.classList.remove("d-none");
+                } else {
+                    document.getElementById("dialogUploadFail")!.classList.remove("d-none");
+                    document.getElementById("dialogUploadSuccess")!.classList.add("d-none");
+                }
                 carousel.next();
             }, {once: true});
         }, {once: true})
