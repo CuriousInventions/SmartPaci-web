@@ -63,6 +63,7 @@ export type FirmwareInfo = {
 };
 
 export interface PaciEventMap {
+    'battery': CustomEvent<{value: number}>;
     'bite': CustomEvent<{value: number}>;
     'suck': CustomEvent<{values: number[]}>;
     'touch': CustomEvent<{values: number[]}>;
@@ -105,12 +106,18 @@ export class Paci extends typedEventTarget {
     readonly CHARACTERISTIC_BITE_UUID    = "abbd1ef3-62e8-493b-8549-8cb891483e20";
     readonly CHARACTERISTIC_TOUCH_UUID    = "abbd1ef4-62e8-493b-8549-8cb891483e20";
 
+    readonly SERVICE_BATTERY = "battery_service";
+    readonly CHARACTERISTIC_BATTERY_LEVEL = "battery_level";
+
     private _device: BluetoothDevice | null;
     private _service: BluetoothRemoteGATTService | undefined;
     private _controlCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
     private _biteCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
     private _suckCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
     private _touchCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
+
+    private _batteryService: BluetoothRemoteGATTService | undefined;
+    private _batteryCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
 
     private _disconnectSignal: AbortController;
 
@@ -190,6 +197,7 @@ export class Paci extends typedEventTarget {
             ],
             optionalServices: [
                 McuManager.SERVICE_UUID,
+                this.SERVICE_BATTERY,
             ]
         };
 
@@ -238,10 +246,25 @@ export class Paci extends typedEventTarget {
                 this.dispatchEvent(new CustomEvent('featuresUpdated', {detail: {features: this._features}}));
             });
 
+        // Check to see if the battery service is present.
+        await server!.getPrimaryService(this.SERVICE_BATTERY)
+            .then(service => {
+                this._batteryService = service;
+                return this._batteryService.getCharacteristic(this.CHARACTERISTIC_BATTERY_LEVEL);
+            }).then(characteristic => {
+                this._batteryCharacteristic = characteristic;
+                this._batteryCharacteristic.addEventListener("characteristicvaluechanged", event => {
+                    const battery = event.target as BluetoothRemoteGATTCharacteristic;
+                    this.dispatchEvent(new CustomEvent("battery", {detail: { value: battery.value!.getUint8(0) }}));
+                }, {signal: this._disconnectSignal.signal} as any);
+                
+                return this._batteryCharacteristic.startNotifications();
+            });
+
         this._controlCharacteristic = await this._service.getCharacteristic(this.CHARACTERISTIC_CONTROL_UUID);
         this._biteCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_BITE_UUID);
         this._suckCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_FORCE_UUID);
-        this._touchCharacteristic    = await this._service.getCharacteristic(this.CHARACTERISTIC_TOUCH_UUID);
+        this._touchCharacteristic   = await this._service.getCharacteristic(this.CHARACTERISTIC_TOUCH_UUID);
 
         this._biteCharacteristic.addEventListener('characteristicvaluechanged', event => {
             const char = event.target as BluetoothRemoteGATTCharacteristic;

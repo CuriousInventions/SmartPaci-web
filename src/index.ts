@@ -28,6 +28,7 @@ function onReady(_: Event)
     const idBuildDateLabel = document.getElementById("lblBuildDate")!;
     const idStatusLabel = document.getElementById("lblStatus")!;
     const idNameLabel = document.getElementById("lblName")!;
+    const idBatteryLabel = document.getElementById("lblBattery")!;
     const idReconnecting = document.getElementById("reconnecting")!;
     
     const idFirmwareFile = document.getElementById("fileFirmware")! as HTMLInputElement;
@@ -75,6 +76,10 @@ function onReady(_: Event)
         }
 
         tryEnableUpdateButton();
+    });
+
+    paci.addEventListener("battery", event => {
+        idBatteryLabel.innerText = `${event.detail.value}%`;
     });
 
     paci.addEventListener("bite", event => {
