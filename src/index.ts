@@ -30,6 +30,12 @@ function onReady(_: Event)
     const idNameLabel = document.getElementById("lblName")!;
     const idBatteryLabel = document.getElementById("lblBattery")!;
     const idReconnecting = document.getElementById("reconnecting")!;
+    const idEditNameButton = document.getElementById("btnEditName")!;
+    
+    const idTouchCheck0 = document.getElementById("btnTouchCheck0")! as HTMLInputElement;
+    const idTouchCheck1 = document.getElementById("btnTouchCheck1")! as HTMLInputElement;
+    const idTouchCheck2 = document.getElementById("btnTouchCheck2")! as HTMLInputElement;
+    const idTouchCheck3 = document.getElementById("btnTouchCheck3")! as HTMLInputElement;
     
     const idFirmwareFile = document.getElementById("fileFirmware")! as HTMLInputElement;
     const idUploadFirmwareButton = document.getElementById("btnUploadFirmware")! as HTMLButtonElement;
@@ -74,6 +80,23 @@ function onReady(_: Event)
         if (paci.hasFeature(PaciFeature.McuMgr)) {
             idMcuMgmtButton.style.display = "";
         }
+        if (paci.hasFeature(PaciFeature.Bite)) {
+            idBiteProgress.closest(".card-text")?.classList.remove("d-none");
+        } else {
+            idBiteProgress.closest(".card-text")?.classList.add("d-none");
+        }
+
+        if (paci.hasFeature(PaciFeature.Suck)) {
+            idSuckProgress.closest(".card-text")?.classList.remove("d-none");
+        } else {
+            idSuckProgress.closest(".card-text")?.classList.add("d-none");
+        }
+
+        if (paci.hasFeature(PaciFeature.Touch)) {
+            idTouchCheck0.closest(".card-text")?.classList.remove("d-none");
+        } else {
+            idTouchCheck0.closest(".card-text")?.classList.add("d-none");
+        }
 
         tryEnableUpdateButton();
     });
@@ -90,7 +113,10 @@ function onReady(_: Event)
         idSuckProgress.style.width = ((event.detail.values[0] / 255) * 100) + "%";
     });
     paci.addEventListener("touch", event => {
-        console.log("Touched pads:", event.detail.values);
+        idTouchCheck0.checked = event.detail.values.includes(0);
+        idTouchCheck1.checked = event.detail.values.includes(1);
+        idTouchCheck2.checked = event.detail.values.includes(2);
+        idTouchCheck3.checked = event.detail.values.includes(3);
     });
 
     // Connect to the paci!
@@ -235,6 +261,12 @@ function onReady(_: Event)
         });
     });
 
+    idEditNameButton.addEventListener('click', async _ => {
+        const name = prompt("Set device name");
+        if (name) {
+            await paci.setName(name);
+        }
+    });
 }
 
 window.addEventListener("DOMContentLoaded", onReady);

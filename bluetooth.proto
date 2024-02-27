@@ -31,6 +31,7 @@ message SensorReadings {
         MouthTemp = 3;
         PaciTemp = 4;
         Buttons = 5; // Bitmap of buttons pressed.
+        Battery = 6;
     }
 
     message SensorValue {
@@ -51,6 +52,10 @@ message FeatureResponse {
     repeated Feature features = 1;
 }
 
+message Setting {
+    string name = 1;
+}
+
 message VersionRequest {
 }
 
@@ -64,6 +69,7 @@ message ControlRequest {
         VersionRequest firmware_version = 2;
         VersionRequest hardware_version = 3;
         FeaturesRequest feature = 4;
+        Setting setting = 5;
     }
 }
 
