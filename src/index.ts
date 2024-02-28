@@ -1,5 +1,15 @@
 // import {MCUManager} from "./mcumgr";
-import {CalibrationType, InputType, Paci, PaciFeature, FirmwareInfo} from "./paci";
+import {
+    CalibrationType,
+    FirmwareInfo,
+    InputType,
+    Paci,
+    PaciFeature,
+} from "./paci";
+import {
+    UserContent,
+} from "./usercontent";
+
 import '@popperjs/core';
 import * as bootstrap from 'bootstrap';
 import 'bootstrap-icons/font/bootstrap-icons.css'
@@ -15,7 +25,9 @@ function onReady(_: Event)
 {
     // const mgr = new MCUManager();
     const paci = new Paci();
-    
+    const usercontent = new UserContent();
+    const audioContext = new AudioContext();
+
     const idCalibrateSuckMinButton = document.getElementById("btnCalibrateSuckMin")!;
     const idCalibrateSuckMaxButton = document.getElementById("btnCalibrateSuckMax")!;
     const idMcuMgmtButton = document.getElementById("btnMcuMgr")!;
@@ -31,18 +43,22 @@ function onReady(_: Event)
     const idBatteryLabel = document.getElementById("lblBattery")!;
     const idReconnecting = document.getElementById("reconnecting")!;
     const idEditNameButton = document.getElementById("btnEditName")!;
-    
+
     const idTouchCheck0 = document.getElementById("btnTouchCheck0")! as HTMLInputElement;
     const idTouchCheck1 = document.getElementById("btnTouchCheck1")! as HTMLInputElement;
     const idTouchCheck2 = document.getElementById("btnTouchCheck2")! as HTMLInputElement;
     const idTouchCheck3 = document.getElementById("btnTouchCheck3")! as HTMLInputElement;
-    
+    const idTouchFile0 = document.getElementById("inputTouchFile0")! as HTMLInputElement;
+    const idTouchFile1 = document.getElementById("inputTouchFile1")! as HTMLInputElement;
+    const idTouchFile2 = document.getElementById("inputTouchFile2")! as HTMLInputElement;
+    const idTouchFile3 = document.getElementById("inputTouchFile3")! as HTMLInputElement;
+
     const idFirmwareFile = document.getElementById("fileFirmware")! as HTMLInputElement;
     const idUploadFirmwareButton = document.getElementById("btnUploadFirmware")! as HTMLButtonElement;
     const idUploadButtonValidation = document.getElementById("btnUploadFirmwareValidation")! as HTMLElement;
     const idFirmwareValidation = document.getElementById("fileFirmwareValidation")! as HTMLElement;
 
-    // Initalise all tooltips (this is an opt-in feature).
+    // Initialise all tooltips (this is an opt-in feature).
     const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
 
@@ -112,11 +128,54 @@ function onReady(_: Event)
     paci.addEventListener("suck", event => {
         idSuckProgress.style.width = ((event.detail.values[0] / 255) * 100) + "%";
     });
+
+    usercontent.addEventListener("ready", _ => {
+        [idTouchFile0, idTouchFile1, idTouchFile2, idTouchFile3].forEach(input => {
+            const touchId = Number(input.id.at(-1));
+            usercontent.getTouchFile(touchId)
+                .then(file => {
+                    const span = input.closest("div")?.querySelector("label > span");
+                    if (span) {
+                        span.innerHTML = ` - ${file.filename}`;
+                    }
+                });
+
+            input.addEventListener("change", event => {
+                const files = (event.target! as HTMLInputElement).files;
+                if (files?.length == 0)
+                    return;
+                usercontent.setTouchFile(files![0], touchId);
+            });
+        });
+    });
+
+    let touched :number[] = [];
     paci.addEventListener("touch", event => {
-        idTouchCheck0.checked = event.detail.values.includes(0);
-        idTouchCheck1.checked = event.detail.values.includes(1);
-        idTouchCheck2.checked = event.detail.values.includes(2);
-        idTouchCheck3.checked = event.detail.values.includes(3);
+        [idTouchCheck0, idTouchCheck1, idTouchCheck2, idTouchCheck3].forEach(input => {
+            const touchId = Number(input.id.at(-1));
+            input.checked = event.detail.values.includes(touchId);
+            if (input.checked && !touched.includes(touchId)) {
+                usercontent.getTouchFile(touchId)
+                .then(file => {
+                    console.log((file.blob as Uint8Array).buffer);
+                    return audioContext.decodeAudioData(file.blob.buffer);
+                }).then(audio => {
+                    // This is the AudioNode to use when we want to play an AudioBuffer
+                    const source = audioContext.createBufferSource();
+
+                    // set the buffer in the AudioBufferSourceNode
+                    source.buffer = audio;
+
+                    // connect the AudioBufferSourceNode to the
+                    // destination so we can hear the sound
+                    source.connect(audioContext.destination);
+
+                    // start the source playing
+                    source.start();
+                });
+            }
+        });
+        touched = event.detail.values;
     });
 
     // Connect to the paci!
@@ -143,11 +202,11 @@ function onReady(_: Event)
     idDisconnectButton.addEventListener('click', async _ => {
         await paci.disconnect();
     });
-    
+
     idCalibrateSuckMinButton.addEventListener('click', async _ => {
         await paci.calibrateInput(InputType.Suck, CalibrationType.Min);
     });
-    
+
     idCalibrateSuckMaxButton.addEventListener('click', async _ => {
         await paci.calibrateInput(InputType.Suck, CalibrationType.Max);
     });
@@ -165,7 +224,7 @@ function onReady(_: Event)
             idFirmwareValidation.classList.add('valid-feedback');
             idFirmwareValidation.classList.remove('invalid-feedback');
 
-            idFirmwareValidation.innerHTML = 
+            idFirmwareValidation.innerHTML =
             `Version: ${info.version}<br>
             Hash: <samp>${info.hash}</samp> <i class="bi ${info.hashValid ? "bi-check-lg" : "bi-cross-lg"}"></i><br>
             Commit: <samp>${info.version.commit}</samp><br>
@@ -204,9 +263,9 @@ function onReady(_: Event)
 
         const mcuManager = paci.mcuManager;
         const carousel = new bootstrap.Carousel(
-            uploadModal.getElementsByClassName("carousel")[0], 
+            uploadModal.getElementsByClassName("carousel")[0],
             {
-                touch: false, 
+                touch: false,
                 keyboard: false,
             });
 
@@ -214,11 +273,11 @@ function onReady(_: Event)
         carousel.to(0);
         carousel.pause();
 
-        
+
         // modelFooter is collaspable and may be hidden.
         modelFooter.classList.add('show');
         uploadModalInstance.show(button);
-        
+
         mcuManager.addEventListener('imageUploadProgress', event => {
             const progress = (event.detail.percentage) + "%";
             uploadProgress.innerText = uploadProgress.style.width = progress;
