@@ -7,6 +7,7 @@ import {
     Setting,
     Version,
     VersionRequest,
+    SensorReadings_Sensor,
 } from "./generated/bluetooth_pb";
 
 import {
@@ -94,7 +95,7 @@ export interface PaciEventMap {
 }
 
 // A bitmap of supported features a device may have.
-// Each variant must be a bit shited value.
+// Each variant must be a bit shifted value.
 export enum PaciFeature {
     McuMgr = (1 << 0),
     Bite   = (1 << 1),
@@ -307,7 +308,8 @@ export class Paci extends typedEventTarget {
                     forces[i] = char.value?.getUint8(i) ?? 0;
                 }
 
-                this.dispatchEvent(new CustomEvent("suck", {detail: {values: forces}}));
+                console.warn("This is a workaround for Elise until CAPCon is over.");
+                // this.dispatchEvent(new CustomEvent("suck", {detail: {values: forces}}));
             }, {signal: this._disconnectSignal.signal} as any);
             await this._suckCharacteristic.startNotifications();
             this._features |= PaciFeature.Suck;
@@ -366,6 +368,33 @@ export class Paci extends typedEventTarget {
                     break;
                 case "sensorReadings":
                     const sensorReadings = response.response.value as SensorReadings;
+                    // this.dispatchEvent(new CustomEvent("sensor", {
+                    //     detail: {
+                    //         version: new PaciVersion(
+                    //             {
+                    //                 major: version.major,
+                    //                 minor: version.minor,
+                    //                 revision: version.revision,
+                    //                 build: version.build,
+                    //             },
+                    //             toHex(version.commit),
+                    //             new Date(version.timestamp == BigInt(0) ? NaN : (Number(version.timestamp) * 1000)),
+                    //         ),
+                    //     }
+                    // }));
+                    sensorReadings.sensors.forEach(reading => {
+                        if (reading.sensor == SensorReadings_Sensor.Buttons) {
+                            console.warn("This is a workaround for Elise until CAPCon is over.");
+                            const touch_bitmap: number = reading.value;
+                            const touches: number[] = [];
+                            for(let i = 0; i < 8; i++) {
+                                if ((touch_bitmap & (1<<i)) != 0) {
+                                    touches.push(i);
+                                }
+                            }
+                            this.dispatchEvent(new CustomEvent("touch", {detail: {values: touches}}));
+                        }
+                    });
                     break;
                 default:
                     console.log(`Unsupported response (${response.response.case})`, response);
