@@ -108,11 +108,11 @@ function onReady(_: Event)
             idSuckProgress.closest(".card-text")?.classList.add("d-none");
         }
 
-        if (paci.hasFeature(PaciFeature.Touch)) {
-            idTouchCheck0.closest(".card-text")?.classList.remove("d-none");
-        } else {
-            idTouchCheck0.closest(".card-text")?.classList.add("d-none");
-        }
+        // if (paci.hasFeature(PaciFeature.Touch)) {
+        idTouchCheck0.closest(".card-text")?.classList.remove("d-none");
+        // } else {
+            // idTouchCheck0.closest(".card-text")?.classList.add("d-none");
+        // }
 
         tryEnableUpdateButton();
     });
