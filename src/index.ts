@@ -135,16 +135,24 @@ function onReady(_: Event)
             usercontent.getTouchFile(touchId)
                 .then(file => {
                     const span = input.closest("div")?.querySelector("label > span");
-                    if (span) {
+                    if (file && span) {
                         span.innerHTML = ` - ${file.filename}`;
                     }
                 });
 
             input.addEventListener("change", event => {
                 const files = (event.target! as HTMLInputElement).files;
-                if (files?.length == 0)
+                const span = input.closest("div")?.querySelector("label > span");
+                if (files?.length != 1) {
+                    if (span)
+                        span.innerHTML = '';
                     return;
+                }
+
                 usercontent.setTouchFile(files![0], touchId);
+                if (span) {
+                    span.innerHTML = ` - ${files![0].name}`;
+                }
             });
         });
     });
