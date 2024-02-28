@@ -132,26 +132,37 @@ function onReady(_: Event)
     usercontent.addEventListener("ready", _ => {
         [idTouchFile0, idTouchFile1, idTouchFile2, idTouchFile3].forEach(input => {
             const touchId = Number(input.id.at(-1));
+            const span = input.closest("div")?.querySelector("label > span");
+            const button = input.closest("div")?.querySelector("label > button");
             usercontent.getTouchFile(touchId)
                 .then(file => {
-                    const span = input.closest("div")?.querySelector("label > span");
                     if (file && span) {
                         span.innerHTML = ` - ${file.filename}`;
+                        button?.classList.remove('d-none');
                     }
                 });
 
+            button?.addEventListener("click", event => {
+                usercontent.removeTouchFile(touchId);
+                if (span) {
+                    span.innerHTML = '';
+                    button?.classList.add('d-none');
+                }
+            });
             input.addEventListener("change", event => {
                 const files = (event.target! as HTMLInputElement).files;
-                const span = input.closest("div")?.querySelector("label > span");
                 if (files?.length != 1) {
-                    if (span)
+                    if (span) {
                         span.innerHTML = '';
+                        button?.classList.add('d-none');
+                    }
                     return;
                 }
 
                 usercontent.setTouchFile(files![0], touchId);
                 if (span) {
                     span.innerHTML = ` - ${files![0].name}`;
+                    button?.classList.remove('d-none');
                 }
             });
         });

@@ -70,4 +70,16 @@ export class UserContent extends EventTarget{
             }, {once: true});
         });
     }
+
+    removeTouchFile(touchId: number) {
+        this.getTouchFile(touchId).then(obj => {
+            if (!obj)
+                return;
+            const db = this.request.result;
+            const transaction = db.transaction(this.DB_CONTENT_STORENAME, "readwrite");
+            const store = transaction.objectStore(this.DB_CONTENT_STORENAME);
+
+            store.delete(obj.id);
+        });
+    }
 }
